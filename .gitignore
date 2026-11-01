@@ -1,0 +1,6 @@
+build/
+*.log
+debug/
+dist/
+.generated_files/
+*.inx
