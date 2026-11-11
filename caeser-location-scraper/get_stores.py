@@ -1,0 +1,91 @@
+import requests
+import xlrd
+import time
+import random
+import json
+    
+def get_stores_for_zip(zipcode: str):
+    r = requests.post('https://onlo-bff-api.littlecaesars.com/api/GetClosestStores',
+                      json={'address': {'zip': zipcode}})
+
+    return (r.json(), r.status_code)
+
+if __name__ == "__main__":
+    # load USPS list of zip code locales
+    locale_detail = xlrd.open_workbook('ZIP_Locale_Detail.xls')
+    # there are three sheets in the workbook: 'ZIP_DETAIL',
+    # 'Unique_ZIP_DETAIL', and 'Other'. it's not really clear what the
+    # difference is, but they do have different data. it's also not
+    # clear whether we should be using the locale ZIP or the physical
+    # ZIP.
+    print(locale_detail.sheet_names())
+
+    zip_detail = locale_detail.sheet_by_index(0)
+    # get the 'DELIVERY ZIPCODE' column and trim off the title
+    delivery_zipcodes = zip_detail.col(4)[1:]
+    # shuffle the list so maybe we look less like we're scraping them
+    random.shuffle(delivery_zipcodes)
+    # we can remove duplicates on the fly by checking if the location
+    # number has been seen before
+    seen_location_numbers = []
+    stores = []
+    
+    for entry in delivery_zipcodes:
+        zipcode = entry.value
+
+        store_list, response = get_stores_for_zip(zipcode)
+        if response != 200:
+            print(f'got response {response} for zip code {zipcode}, skipping')
+            print()
+            # it looks like the server returns 202 Accepted if it didn't
+            # find any stores
+            continue
+
+        print(f'stores found for zip code {zipcode}:')
+        # iterate over the locations the server found.  we need the
+        # coordinates for the store for the seeker, but we should also
+        # keep the address and phone number. business hours are per
+        # day for one week, so they might be useful but probably
+        # not. let's take the franchise store id and the store
+        # location number too.
+        for store in store_list['stores']:
+            store_location_number = int(store['locationNumber'])
+            if store_location_number in seen_location_numbers:
+                print(f'store location number {store_location_number} seen before')
+                # don't add this store
+                continue
+
+            # process the info we need
+            store_latitude = float(store['latitude'])
+            store_longitude = float(store['longitude'])
+            store_franchise_id = int(store['franchiseStoreId'])
+            store_address = store['address']
+            # assemble the address into basically the normal postal address format
+            store_address_str = store_address['street'] + ' ' + store_address['city'] + ', ' + store_address['state'] + ' ' + store_address['zip']
+
+            seen_location_numbers.append(store_location_number)
+            # it will probably just be easier to hold on to all the
+            # data and then process it into a binary or whatever
+            # later, rather than worry about doing that now, so we'll
+            # dump each store's JSON
+            
+            #stores.append(LittleCaesarsLocation(
+            #    latitude=store_latitude,
+            #    longitude=store_longitude,
+            #    location_number=store_location_number,
+            #    franchise_id=store_franchise_id,
+            #    address=store_address_str))
+
+            # store location numbers appear to go to five digits, but
+            # they could probably go higher
+            with open('stores_full_json/{:06d}.json'.format(store_location_number), 'w') as f:
+                f.write(json.dumps(store))
+                
+            print(f'store at coordinates ({store_latitude}, {store_longitude}):')
+            print(f'  franchise ID {store_franchise_id} and location number {store_location_number}')
+            print(f'  address: {store_address_str}')
+            print()
+
+        # don't wake the sleeping dogs
+        time.sleep(random.random()*2.28902)
+    
