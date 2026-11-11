@@ -122,9 +122,18 @@ void init_lcd() {
 
     send_byte(display_mode, false);
     
-    debug_printf("display_function: %x, display_control: %x, display_mode: %x\r\n",
-            display_function, display_control, display_mode);
+    /*debug_printf("display_function: %x, display_control: %x, display_mode: %x\r\n",
+            display_function, display_control, display_mode);*/
     __delay_ms(5);
+}
+
+void lcd_set_cursor(uint8_t x, uint8_t y) {
+    if (y == 1) { // second line starts at 0x40
+        send_byte(LCD_SETDDRAMADDR | (x + 0x40), false);
+    } else {
+        send_byte(LCD_SETDDRAMADDR | x, false);
+    }
+    
 }
 
 void lcd_print(const char* string) {

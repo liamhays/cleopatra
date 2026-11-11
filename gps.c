@@ -10,6 +10,8 @@
 #include <stdbool.h>
 #include <string.h>
 
+#include "led.h"
+
 // see https://en.wikipedia.org/wiki/NMEA_0183 for info on NMEA format
 
 uint8_t global_gps_uart_buffer[MAX_GPS_CHARS];
@@ -24,9 +26,8 @@ bool global_gps_nmea_message_complete = false;
 void init_gps_uart() {
     // pins are already unlocked by default
     
-    // set UART1 RX pin to RP0 (RB0) and UART1 TX pin to RP1 (RB1)
-    RPINR18bits.U1RXR = 0;
-    RPOR0bits.RP1R = 3; // 3 = UART1 transmit
+    // set UART1 RX pin to RC5
+    RPINR18bits.U1RXR = 21;
     
     // configure UART to the standard default: 1 stop bit, no parity,
     // 8-bit bytes, and set it to the GPS's 9600 baud
@@ -46,7 +47,7 @@ void init_gps_uart() {
     
     // and enable UART1 receive interrupts
     IEC0bits.U1RXIE = 1;
-    
+    IPC2bits.U1RXIP = 5; // higher
     // and enable the UART
     U1MODEbits.UARTEN = 1;
 }
@@ -56,19 +57,23 @@ void init_gps_uart() {
 void __attribute__((__interrupt__,auto_psv)) _U1RXInterrupt() {
     // clear the interrupt
     IFS0bits.U1RXIF = 0;
-
+    led_toggle();
     // on GPS UART interrupt, write the new byte to the GPS UART buffer
     //
     // we're relying on the mainloop to handle the flag clearing
     
-    
-    // write the current byte
-    global_gps_uart_buffer[global_gps_uart_counter] = U1RXREG;
-    // increment the counter
-    global_gps_uart_counter++;
+    uint8_t b = U1RXREG;
     
     // if we just got a linefeed (end delimiter), the message is over
-    if (global_gps_uart_buffer[global_gps_uart_counter] == 0x0a) {
+    if (b == 0x0a) {
         global_gps_nmea_message_complete = true;
+    } else if (b == '$') {
+        // start of message marker
+        memset(global_gps_uart_buffer, 0, sizeof(global_gps_uart_buffer));
+        global_gps_uart_counter = 0;
+        global_gps_nmea_message_complete = false;
     }
+    
+    global_gps_uart_buffer[global_gps_uart_counter] = b;
+    global_gps_uart_counter++;
 }

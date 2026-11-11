@@ -33,6 +33,8 @@
       </logicalFolder>
       <itemPath>cleopatra.c</itemPath>
       <itemPath>lcd.c</itemPath>
+      <itemPath>spi.c</itemPath>
+      <itemPath>spi.h</itemPath>
     </logicalFolder>
   </logicalFolder>
   <sourceRootList>
@@ -254,6 +256,8 @@
         <property key="memories.programmemory" value="true"/>
         <property key="memories.programmemory.ranges" value="0-aeff"/>
         <property key="poweroptions.powerenable" value="false"/>
+        <property key="programmerToGoFilePath"
+                  value="/home/liam/github_projects/cleopatra/debug/default/default_ptg"/>
         <property key="programoptions.eraseb4program" value="true"/>
         <property key="programoptions.preservedataflash" value="false"/>
         <property key="programoptions.preservedataflash.ranges"

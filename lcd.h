@@ -43,8 +43,11 @@
 
 void init_lcd();
 
-// print 32 characters to the screen
+// print characters to the screen
 void lcd_print(const char* string);
+
+// set the LCD cursor position
+void lcd_set_cursor(uint8_t x, uint8_t y);
 
 // home the LCD cursor
 void lcd_home();

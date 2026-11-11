@@ -105,10 +105,12 @@
 #include "lcd.h"
 /*****
  **** PINS ****
- * UART1 (GPS at 9600 baud): RX into RB0, TX out of RB1
+ * UART1 (GPS at 9600 baud): RX into RC5 = RP21
+ *   This doesn't seem to interfere with anything, the way some pins do
  * UART2 (Debug at 115200 baud): RX into RA11, TX out of RC9
  * LCD: D4-D7 = RA7-RA10, RS = RB8, EN = RB9
- * SPI: MOSI on RB8, MISO on RC4, SCK on RC5, SS on RB7
+ * SPI: MOSI on RC3, MISO on RC4, SCK on RC8, SS on RB7
+ * user button: RA11 to ground, so enable pullup
 ****/
 
 typedef enum CAESAR_SEEKER_SYSTEM_STATE {
@@ -117,63 +119,165 @@ typedef enum CAESAR_SEEKER_SYSTEM_STATE {
     NAVIGATING = 2,
 } caesar_seeker_system_state_t;
 
-void init_spi() {
-    
-}
 
-void read_flash(void* location, uint16_t number_of_bytes) {
-    
-}
+// all of this code assumes that the GPS is sending the RMC and the GGA message!
 
-// all of this code assumes that the GPS is sending the RMC and GGA message!
-// RMC includes PVT and fix status, GGA includes
 
 
 typedef struct little_caesars_location {
     uint32_t location_number;
-    double latitude;
-    double longitude;
+    float latitude;
+    float longitude;
     char street_address[128];
 } little_caesars_location_t;
 
 // data format: 
 // - 4 bytes (u32) location number
-// - 8 bytes latitude (float64)
-// - 8 bytes longitude (float64)
+// - 4 bytes latitude (float32)
+// - 4 bytes longitude (float32)
 // - 128 bytes null-terminated street address
 
-#define LOCATION_DATABASE_ENTRY_LENGTH (4+8+8+128)
+#define LOCATION_DATABASE_ENTRY_LENGTH (4+4+4+128)
 // 30 stores is 4440 bytes, which is fine
 #define LOCATION_COUNT_IN_BUFFER (30)
-uint8_t flash_buffer[LOCATION_DATABASE_ENTRY_LENGTH*LOCATION_COUNT_IN_BUFFER];
+#define FLASH_BUFFER_BYTES (LOCATION_DATABASE_ENTRY_LENGTH*LOCATION_COUNT_IN_BUFFER)
+uint8_t flash_buffer[FLASH_BUFFER_BYTES];
+uint32_t flash_address = 0;
 
 // used in debug.c
 extern bool global_sending_debug_message;
+// used in gps.c
+extern bool global_gps_nmea_message_complete;
+extern uint8_t global_gps_uart_buffer[];
 
+// double doesn't exist! it gets converted to binary32 float
+float dtest = 52.2;
+little_caesars_location_t location_info = {0};
 
-
-
+// printing \r\n stops minicom from buffering on linux, for some reason
 int main(void) {
     init_debug_uart();
     init_gps_uart();
     init_led();
-    //init_lcd();
     init_lcd();
-    char str[16];
-    sprintf(str, "%g", sin(1.2345));
-    lcd_print(str);//"Big chungus is among us.");
-    while (1) {
-        /*if (!global_sending_debug_message) {
-            debug_printf("Hello world!\r\n");
-        }*/
+    init_spi();
+    
+    /*while (1) {
+        debug_printf("big chungus \r\n");
+        __delay_ms(100);
+    }*/
+    
+    // PIC24 is little-endian
+    
+    memset(flash_buffer, 0, sizeof(flash_buffer));
+    
+    uint32_t stores_count = 0;
+    read_spi_flash(flash_address, 4, &stores_count);
+    
+    flash_address += 4;
+    
+    debug_printf("store count: %lu\r\n", stores_count);
+    __delay_ms(40);
+    for (int i = 0; i < stores_count / LOCATION_COUNT_IN_BUFFER; i++) {
+        debug_printf("read flash from %lu\r\n", flash_address);
+        __delay_ms(100);
+        read_spi_flash(flash_address, FLASH_BUFFER_BYTES, flash_buffer);
+        flash_address += FLASH_BUFFER_BYTES;
         
+        
+        
+        for (uint32_t store = 0; store < LOCATION_COUNT_IN_BUFFER; store++) {
+            // copy into the location struct
+            memcpy(&(location_info.location_number), &flash_buffer[store*LOCATION_DATABASE_ENTRY_LENGTH], 4);
+            // byte order is backward on lat/lon even though it works on other platforms
+            memcpy(&location_info.latitude, &flash_buffer[store*LOCATION_DATABASE_ENTRY_LENGTH+4], 4);
+            memcpy(&location_info.longitude, &flash_buffer[store*LOCATION_DATABASE_ENTRY_LENGTH+4+4], 4);
+            memcpy(&location_info.street_address, &flash_buffer[store*LOCATION_DATABASE_ENTRY_LENGTH+4+4+4], 128);
+            
+            debug_printf("store #: %lu\r\n", location_info.location_number);
+            __delay_ms(100);
+            debug_printf("lat: %f, lon: %f\r\n", location_info.latitude, location_info.longitude);
+            __delay_ms(100);
+            debug_printf("lat hex: 0x");
+            __delay_ms(40);
+                debug_printf("%f\r\n", 52.2);//flash_buffer[store*LOCATION_DATABASE_ENTRY_LENGTH+4+8]);
+                __delay_ms(100);
+            /*debug_printf("street address: %s\r\n\r\n", location_info.street_address);
+            __delay_ms(100);*/
+        }
+        
+    }
+        while (1);
+    /*while (1) {
+        lcd_home();
+        lcd_print("abcdef_abcdef_ab");
+        __delay_ms(50);
+        lcd_set_cursor(0, 1);
+        lcd_print("tuvwyx_tuvwyx_tu");
+        
+        __delay_ms(500);
+    }*/
+    /*char gps_message[MAX_GPS_CHARS];
+    
+    char lcd_string[32];
+    float current_latitude = 0;
+    float current_longitude = 0;
+    float current_heading = 0;
+    uint8_t current_fix_type = 0;
+    
+    while (1) {
+        if (global_gps_nmea_message_complete) {
+            // copy the message to our own buffer so we can do stuff with it
+            memcpy(gps_message, global_gps_uart_buffer, MAX_GPS_CHARS);
+            
+            global_gps_nmea_message_complete = false;
+
+            //debug_printf("%s\r\n", gps_message);
+            
+            struct minmea_sentence_rmc rmc_frame = {0};
+            struct minmea_sentence_gga gga_frame = {0};
+        
+            switch (minmea_sentence_id(gps_message, false)) {
+                case MINMEA_SENTENCE_RMC:
+                    // just ignore messages that don't parse
+                    // some of the messsages on printf don't look right,
+                    // but I can't tell if that's a GPS receiving issue or
+                    // a printf issue.
+                    if (minmea_parse_rmc(&rmc_frame, gps_message)) {
+                        current_latitude = minmea_tocoord(&rmc_frame.latitude);
+                        current_longitude = minmea_tocoord(&rmc_frame.longitude);
+                        current_heading = minmea_tofloat(&rmc_frame.course);
+                        sprintf(lcd_string, "%.3f/%.3f", current_latitude, current_longitude);
+                        lcd_home();
+                        lcd_print(lcd_string);
+                        lcd_set_cursor(0, 1);
+                        sprintf(lcd_string, "%.3f", current_heading);
+                        lcd_print(lcd_string);
+                    }
+
+                    break;
+
+                case MINMEA_SENTENCE_GGA:
+                    if (minmea_parse_gga(&gga_frame, gps_message)) {
+                        current_fix_type = gga_frame.fix_quality;
+                        
+                        sprintf(lcd_string, "%u", current_fix_type);
+                        lcd_set_cursor(15, 1);
+                        lcd_print(lcd_string);
+                    }
+                    break;
+                    
+            }
+        }
+
         // reference manual says this bit stops data reception if left at 1
         if (U1STAbits.OERR == 1) {
+            debug_printf("UART1 OERR\r\n");
             U1STAbits.OERR = 0;
         }
         
     }
-    
+    */
     //while (1);
     /*while (1) {
         U2TXREG = 'a';

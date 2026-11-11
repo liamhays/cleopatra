@@ -38,10 +38,10 @@ void debug_printf(const char* format, ...) {
         
         // interrupt will send the rest of the buffer
         U2TXREG = global_debug_print_buffer[global_debug_message_current_index];
-        // for some reason, the first character gets gobbled (maybe the fault
+        // for some reason, the first character gets gobbled sometimes (maybe the fault
         // of the debugger?). simply not incrementing the index fixes this
         // by sending the first character twice.
-        //global_debug_message_current_index++;
+        global_debug_message_current_index++;
     }
     va_end(args);
 }
@@ -87,7 +87,6 @@ void init_debug_uart() {
 // the PSV functionality
 void __attribute__((__interrupt__,auto_psv)) _U2TXInterrupt() {
     IFS1bits.U2TXIF = 0; // clear interrupt
-    led_toggle();
     
     // if there's a debug message being sent, continue sending it
     if (global_sending_debug_message) {

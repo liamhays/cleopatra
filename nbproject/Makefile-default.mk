@@ -51,17 +51,17 @@ OBJECTDIR=build/${CND_CONF}/${IMAGE_TYPE}
 DISTDIR=dist/${CND_CONF}/${IMAGE_TYPE}
 
 # Source Files Quoted if spaced
-SOURCEFILES_QUOTED_IF_SPACED=minmea/minmea.c debug.c led.c gps.c cleopatra.c lcd.c
+SOURCEFILES_QUOTED_IF_SPACED=minmea/minmea.c debug.c led.c gps.c cleopatra.c lcd.c spi.c
 
 # Object Files Quoted if spaced
-OBJECTFILES_QUOTED_IF_SPACED=${OBJECTDIR}/minmea/minmea.o ${OBJECTDIR}/debug.o ${OBJECTDIR}/led.o ${OBJECTDIR}/gps.o ${OBJECTDIR}/cleopatra.o ${OBJECTDIR}/lcd.o
-POSSIBLE_DEPFILES=${OBJECTDIR}/minmea/minmea.o.d ${OBJECTDIR}/debug.o.d ${OBJECTDIR}/led.o.d ${OBJECTDIR}/gps.o.d ${OBJECTDIR}/cleopatra.o.d ${OBJECTDIR}/lcd.o.d
+OBJECTFILES_QUOTED_IF_SPACED=${OBJECTDIR}/minmea/minmea.o ${OBJECTDIR}/debug.o ${OBJECTDIR}/led.o ${OBJECTDIR}/gps.o ${OBJECTDIR}/cleopatra.o ${OBJECTDIR}/lcd.o ${OBJECTDIR}/spi.o
+POSSIBLE_DEPFILES=${OBJECTDIR}/minmea/minmea.o.d ${OBJECTDIR}/debug.o.d ${OBJECTDIR}/led.o.d ${OBJECTDIR}/gps.o.d ${OBJECTDIR}/cleopatra.o.d ${OBJECTDIR}/lcd.o.d ${OBJECTDIR}/spi.o.d
 
 # Object Files
-OBJECTFILES=${OBJECTDIR}/minmea/minmea.o ${OBJECTDIR}/debug.o ${OBJECTDIR}/led.o ${OBJECTDIR}/gps.o ${OBJECTDIR}/cleopatra.o ${OBJECTDIR}/lcd.o
+OBJECTFILES=${OBJECTDIR}/minmea/minmea.o ${OBJECTDIR}/debug.o ${OBJECTDIR}/led.o ${OBJECTDIR}/gps.o ${OBJECTDIR}/cleopatra.o ${OBJECTDIR}/lcd.o ${OBJECTDIR}/spi.o
 
 # Source Files
-SOURCEFILES=minmea/minmea.c debug.c led.c gps.c cleopatra.c lcd.c
+SOURCEFILES=minmea/minmea.c debug.c led.c gps.c cleopatra.c lcd.c spi.c
 
 
 
@@ -125,6 +125,12 @@ ${OBJECTDIR}/lcd.o: lcd.c  .generated_files/flags/default/f26b129032cbc6353e195d
 	@${RM} ${OBJECTDIR}/lcd.o 
 	${MP_CC} $(MP_EXTRA_CC_PRE)  lcd.c  -o ${OBJECTDIR}/lcd.o  -c -mcpu=$(MP_PROCESSOR_OPTION)  -MP -MMD -MF "${OBJECTDIR}/lcd.o.d"      -g -D__DEBUG   -mno-eds-warn  -omf=elf -DXPRJ_default=$(CND_CONF)    $(COMPARISON_BUILD)  -O0 -msmart-io=1 -Wall -msfr-warn=off    -mdfp="${DFP_DIR}/xc16"
 	
+${OBJECTDIR}/spi.o: spi.c  .generated_files/flags/default/442b8ee8e03b805dce06b08c5afe35c00430a3a1 .generated_files/flags/default/da39a3ee5e6b4b0d3255bfef95601890afd80709
+	@${MKDIR} "${OBJECTDIR}" 
+	@${RM} ${OBJECTDIR}/spi.o.d 
+	@${RM} ${OBJECTDIR}/spi.o 
+	${MP_CC} $(MP_EXTRA_CC_PRE)  spi.c  -o ${OBJECTDIR}/spi.o  -c -mcpu=$(MP_PROCESSOR_OPTION)  -MP -MMD -MF "${OBJECTDIR}/spi.o.d"      -g -D__DEBUG   -mno-eds-warn  -omf=elf -DXPRJ_default=$(CND_CONF)    $(COMPARISON_BUILD)  -O0 -msmart-io=1 -Wall -msfr-warn=off    -mdfp="${DFP_DIR}/xc16"
+	
 else
 ${OBJECTDIR}/minmea/minmea.o: minmea/minmea.c  .generated_files/flags/default/a7847b8effce92637fea3d6d7f19130058c35879 .generated_files/flags/default/da39a3ee5e6b4b0d3255bfef95601890afd80709
 	@${MKDIR} "${OBJECTDIR}/minmea" 
@@ -161,6 +167,12 @@ ${OBJECTDIR}/lcd.o: lcd.c  .generated_files/flags/default/2378b70dbe6a679cc5bb92
 	@${RM} ${OBJECTDIR}/lcd.o.d 
 	@${RM} ${OBJECTDIR}/lcd.o 
 	${MP_CC} $(MP_EXTRA_CC_PRE)  lcd.c  -o ${OBJECTDIR}/lcd.o  -c -mcpu=$(MP_PROCESSOR_OPTION)  -MP -MMD -MF "${OBJECTDIR}/lcd.o.d"      -mno-eds-warn  -g -omf=elf -DXPRJ_default=$(CND_CONF)    $(COMPARISON_BUILD)  -O0 -msmart-io=1 -Wall -msfr-warn=off    -mdfp="${DFP_DIR}/xc16"
+	
+${OBJECTDIR}/spi.o: spi.c  .generated_files/flags/default/41c6af3bb147c66078848de9a01ce932d841ac85 .generated_files/flags/default/da39a3ee5e6b4b0d3255bfef95601890afd80709
+	@${MKDIR} "${OBJECTDIR}" 
+	@${RM} ${OBJECTDIR}/spi.o.d 
+	@${RM} ${OBJECTDIR}/spi.o 
+	${MP_CC} $(MP_EXTRA_CC_PRE)  spi.c  -o ${OBJECTDIR}/spi.o  -c -mcpu=$(MP_PROCESSOR_OPTION)  -MP -MMD -MF "${OBJECTDIR}/spi.o.d"      -mno-eds-warn  -g -omf=elf -DXPRJ_default=$(CND_CONF)    $(COMPARISON_BUILD)  -O0 -msmart-io=1 -Wall -msfr-warn=off    -mdfp="${DFP_DIR}/xc16"
 	
 endif
 
