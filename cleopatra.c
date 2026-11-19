@@ -94,6 +94,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <math.h>
+#include <float.h>
 
 #include "minmea/minmea.h"
 
@@ -113,13 +114,68 @@
  * user button: RA11 to ground, so enable pullup
 ****/
 
+
+// location calculation functions from TinyGPS++ arduino library
+#define _GPS_EARTH_MEAN_RADIUS 6371009
+#define PI (3.14159)
+float earth_distance_between(float lat1, float long1, float lat2, float long2) {
+  // returns distance in meters between two positions, both specified
+  // as signed decimal-degrees latitude and longitude. Uses great-circle
+  // distance computation for hypothetical sphere of radius 6371009 meters.
+  // Because Earth is no exact sphere, rounding errors may be up to 0.5%.
+  // Courtesy of Maarten Lamers
+  float delta = (long1-long2)*PI / 180; // to radians
+  float sdlong = sin(delta);
+  float cdlong = cos(delta);
+  lat1 = lat1*PI / 180;
+  lat2 = lat2*PI / 180;
+  float slat1 = sin(lat1);
+  float clat1 = cos(lat1);
+  float slat2 = sin(lat2);
+  float clat2 = cos(lat2);
+  delta = (clat1 * slat2) - (slat1 * clat2 * cdlong);
+  delta = (delta*delta);
+  delta += (clat2 * sdlong) * (clat2 * sdlong);
+  delta = sqrt(delta);
+  float denom = (slat1 * slat2) + (clat1 * clat2 * cdlong);
+  delta = atan2(delta, denom);
+  return delta * _GPS_EARTH_MEAN_RADIUS;
+}
+
+
+float heading_to_location(float lat1, float long1, float lat2, float long2) {
+  // returns course in degrees (North=0, West=270) from position 1 to position 2,
+  // both specified as signed decimal-degrees latitude and longitude.
+  // Because Earth is no exact sphere, calculated course may be off by a tiny fraction.
+  // Courtesy of Maarten Lamers
+  float dlon = (long2-long1) * PI / 180;
+  lat1 = lat1*PI / 180;
+  lat2 = lat2*PI / 180;
+  float a1 = sin(dlon) * cos(lat2);
+  float a2 = sin(lat1) * cos(lat2) * cos(dlon);
+  a2 = cos(lat1) * sin(lat2) - a2;
+  a2 = atan2(a1, a2);
+  if (a2 < 0.0)
+  {
+    a2 += 2*PI;
+  }
+  return (a2/180)*PI;
+}
+
+
 typedef enum CAESAR_SEEKER_SYSTEM_STATE {
     WAITING_FOR_FIX = 0,
     SEARCHING = 1,
     NAVIGATING = 2,
 } caesar_seeker_system_state_t;
 
-
+typedef enum NAVIGATION_DISPLAY_MODE {
+    STREET_ADDRESS_PAGE_1 = 0,
+    STREET_ADDRESS_PAGE_2 = 1,        
+    DISTANCE_TO_LOCATION = 2,
+    NAVIGATION_DISPLAY_MODE_END,
+            
+} navigation_display_mode_t;
 // all of this code assumes that the GPS is sending the RMC and the GGA message!
 
 
@@ -130,6 +186,7 @@ typedef struct little_caesars_location {
     float longitude;
     char street_address[128];
 } little_caesars_location_t;
+
 
 // data format: 
 // - 4 bytes (u32) location number
@@ -153,6 +210,10 @@ extern uint8_t global_gps_uart_buffer[];
 // double doesn't exist! it gets converted to binary32 float
 float dtest = 52.2;
 little_caesars_location_t location_info = {0};
+little_caesars_location_t nearest_location = {0};
+
+    
+uint16_t last_timer_value = 0;
 
 // printing \r\n stops minicom from buffering on linux, for some reason
 int main(void) {
@@ -161,13 +222,16 @@ int main(void) {
     init_led();
     init_lcd();
     init_spi();
-    
-    /*while (1) {
-        debug_printf("big chungus \r\n");
-        __delay_ms(100);
-    }*/
-    
+
+    // init RA11 button
+    TRISAbits.TRISA11 = 1; // input
+
     // PIC24 is little-endian
+    
+    // use timer 1 for debouncing
+    // set to 1:256 prescale (15625Hz)
+    T1CONbits.TCKPS = 0b11;
+    T1CONbits.TON = 1;
     
     memset(flash_buffer, 0, sizeof(flash_buffer));
     
@@ -176,63 +240,28 @@ int main(void) {
     
     flash_address += 4;
     
-    debug_printf("store count: %lu\r\n", stores_count);
-    __delay_ms(40);
-    for (int i = 0; i < stores_count / LOCATION_COUNT_IN_BUFFER; i++) {
-        debug_printf("read flash from %lu\r\n", flash_address);
-        __delay_ms(100);
-        read_spi_flash(flash_address, FLASH_BUFFER_BYTES, flash_buffer);
-        flash_address += FLASH_BUFFER_BYTES;
-        
-        
-        
-        for (uint32_t store = 0; store < LOCATION_COUNT_IN_BUFFER; store++) {
-            // copy into the location struct
-            memcpy(&(location_info.location_number), &flash_buffer[store*LOCATION_DATABASE_ENTRY_LENGTH], 4);
-            // byte order is backward on lat/lon even though it works on other platforms
-            memcpy(&location_info.latitude, &flash_buffer[store*LOCATION_DATABASE_ENTRY_LENGTH+4], 4);
-            memcpy(&location_info.longitude, &flash_buffer[store*LOCATION_DATABASE_ENTRY_LENGTH+4+4], 4);
-            memcpy(&location_info.street_address, &flash_buffer[store*LOCATION_DATABASE_ENTRY_LENGTH+4+4+4], 128);
-            
-            debug_printf("store #: %lu\r\n", location_info.location_number);
-            __delay_ms(100);
-            debug_printf("lat: %f, lon: %f\r\n", location_info.latitude, location_info.longitude);
-            __delay_ms(100);
-            debug_printf("lat hex: 0x");
-            __delay_ms(40);
-                debug_printf("%f\r\n", 52.2);//flash_buffer[store*LOCATION_DATABASE_ENTRY_LENGTH+4+8]);
-                __delay_ms(100);
-            /*debug_printf("street address: %s\r\n\r\n", location_info.street_address);
-            __delay_ms(100);*/
-        }
-        
-    }
-        while (1);
-    /*while (1) {
-        lcd_home();
-        lcd_print("abcdef_abcdef_ab");
-        __delay_ms(50);
-        lcd_set_cursor(0, 1);
-        lcd_print("tuvwyx_tuvwyx_tu");
-        
-        __delay_ms(500);
-    }*/
-    /*char gps_message[MAX_GPS_CHARS];
-    
+    char gps_message[MAX_GPS_CHARS];
+    caesar_seeker_system_state_t current_system_state = WAITING_FOR_FIX;
+    navigation_display_mode_t current_navigation_display_mode = STREET_ADDRESS_PAGE_1;
     char lcd_string[32];
     float current_latitude = 0;
     float current_longitude = 0;
     float current_heading = 0;
+    float search_latitude = 0;
+    float search_longitude = 0;
+    float nearest_store_distance = FLT_MAX;
+    
+    uint32_t locations_searched = 0;
     uint8_t current_fix_type = 0;
     
+    lcd_home();
+    lcd_print("waiting for fix");
     while (1) {
         if (global_gps_nmea_message_complete) {
             // copy the message to our own buffer so we can do stuff with it
             memcpy(gps_message, global_gps_uart_buffer, MAX_GPS_CHARS);
             
             global_gps_nmea_message_complete = false;
-
-            //debug_printf("%s\r\n", gps_message);
             
             struct minmea_sentence_rmc rmc_frame = {0};
             struct minmea_sentence_gga gga_frame = {0};
@@ -247,12 +276,6 @@ int main(void) {
                         current_latitude = minmea_tocoord(&rmc_frame.latitude);
                         current_longitude = minmea_tocoord(&rmc_frame.longitude);
                         current_heading = minmea_tofloat(&rmc_frame.course);
-                        sprintf(lcd_string, "%.3f/%.3f", current_latitude, current_longitude);
-                        lcd_home();
-                        lcd_print(lcd_string);
-                        lcd_set_cursor(0, 1);
-                        sprintf(lcd_string, "%.3f", current_heading);
-                        lcd_print(lcd_string);
                     }
 
                     break;
@@ -260,11 +283,10 @@ int main(void) {
                 case MINMEA_SENTENCE_GGA:
                     if (minmea_parse_gga(&gga_frame, gps_message)) {
                         current_fix_type = gga_frame.fix_quality;
-                        
-                        sprintf(lcd_string, "%u", current_fix_type);
-                        lcd_set_cursor(15, 1);
-                        lcd_print(lcd_string);
                     }
+                    break;
+                default:
+                    // don't care about any other messages
                     break;
                     
             }
@@ -276,118 +298,104 @@ int main(void) {
             U1STAbits.OERR = 0;
         }
         
-    }
-    */
-    //while (1);
-    /*while (1) {
-        U2TXREG = 'a';
-        asm volatile ("REPEAT, #4201"); Nop();
-    }*/
-    //debug_printf("%s", "Hello world!");
-    /*
-    caesar_seeker_system_state_t current_system_state = WAITING_FOR_FIX;
-    uint32_t flash_pointer = 0;
-    
-    // scaled to 3 decimal places by minmea
-    // 
-    // 
-    float current_longitude = 0;
-    float current_latitude = 0;
-    little_caesars_location_t nearest_location = {0};
-    
-    // we want to capture the current lat/lon for the search
-    
-    float captured_search_longitude = 0;
-    float captured_search_latitude = 0;
-    
-    uint32_t total_location_count = 0;
-    uint32_t locations_searched = 0;
-    
-    enum minmea_gsa_fix_type fix_type = 0;
-    
-    struct minmea_sentence_rmc rmc_frame;
-    struct minmea_sentence_gsa gsa_frame;
-    // basic loop logic: check for new GPS data, then update the state machine
-    while (true) {
-        // if this flag is true, we have a complete sentence
-        // (the interrupt handler will clear the flag)
-        // if the last character was the terminator (linefeed), reset the GPS UART
-        // buffer counter
-        if (global_gps_nmea_message_complete) {
-            // if the latest message was completed, reset the counter to start
-            // writing over (good practice will have the mainloop watch this flag)
-            // and quickly copy the buffer when the flag is set
-            //
-            // clear the flag
-            global_gps_nmea_message_complete = false;
-
-            // and clear the current gps string buffer counter
-            global_gps_uart_counter = 0;        
-
-            // no idea what setting the second parameter (`strict`) to false
-            // does, but the example does it
-            switch (minmea_sentence_id((const char*)global_gps_uart_buffer, false)) {
-                // rmc (PVT) has coordinates
-                case MINMEA_SENTENCE_RMC:
-                    if (minmea_parse_rmc(&rmc_frame, (const char*)global_gps_uart_buffer)) {
-                        longitude = rmc_frame.longitude;
-                        latitude = rmc_frame.latitude;
-                    }
-
-                    break;
-                // gga has fix status
-                case MINMEA_SENTENCE_GSA:
-                    if (minmea_parse_gsa(&gsa_frame, (const char*)global_gps_uart_buffer)) {
-                        // update fix status
-                        fix_type = gsa_frame.fix_type;
-                    }
-                    break;
-                default:
-                    // don't care about any other messages
-                    // this also suppresses compiler warnings
-                    break;   
-            }
-        }
-
-        // this only executes when we have a 3D fix
+        // run state machine
         if (current_system_state == WAITING_FOR_FIX) {
             // update display
             // if the GPS has a 3D fix, the position data is usable and we
             // can go search the database
-            if (fix_type == MINMEA_GPGSA_FIX_3D) {
-                flash_pointer = 0;
+            if (current_fix_type == 1 || current_fix_type == 2) {
+                // 1: normal fix
+                // 2: fix with differential data
+                lcd_home();
+                lcd_print("GPS fix acquired");
                 // capture the latitude and longitude for the search
-                captured_search_latitude = current_latitude;
-                captured_search_longitude = current_longitude;
+                search_latitude = current_latitude;
+                search_longitude = current_longitude;
                 locations_searched = 0;
                 current_system_state = SEARCHING;
             } 
             
         } else if (current_system_state == SEARCHING) {
             // search through the flash database
-            // start by reading the 4-byte number of store locations
-            if (locations_searched == 0) {
-                // if we just got here (locations_searched is 0),
-                // load in the total number of locations in the database
-                read_flash(&number_of_locations, 4);
-                flash_pointer += 4;
-                memset(flash_buffer, 0, sizeof(flash_buffer));
+            for (uint32_t i = 0; i < stores_count / LOCATION_COUNT_IN_BUFFER; i++) {
+                lcd_set_cursor(0, 1);
+                char str[16];
+                memset(str, 0, sizeof(str));
+                sprintf(str, "search %lu/%lu", i*LOCATION_COUNT_IN_BUFFER, stores_count);
+                lcd_print(str);
+                
+                read_spi_flash(flash_address, FLASH_BUFFER_BYTES, flash_buffer);
+                flash_address += FLASH_BUFFER_BYTES;
+
+                for (uint32_t store = 0; store < LOCATION_COUNT_IN_BUFFER; store++) {
+                    // copy into the location struct
+                    memcpy(&(location_info.location_number), &flash_buffer[store*LOCATION_DATABASE_ENTRY_LENGTH], 4);
+                    // byte order is backward on lat/lon even though it works on other platforms
+                    memcpy(&location_info.latitude, &flash_buffer[store*LOCATION_DATABASE_ENTRY_LENGTH+4], 4);
+                    memcpy(&location_info.longitude, &flash_buffer[store*LOCATION_DATABASE_ENTRY_LENGTH+4+4], 4);
+                    memcpy(&location_info.street_address, &flash_buffer[store*LOCATION_DATABASE_ENTRY_LENGTH+4+4+4], 128);
+
+                    float distance = earth_distance_between(search_latitude, search_longitude, location_info.latitude, location_info.longitude);
+                    if (distance < nearest_store_distance) {
+                        // copy location info
+                        memcpy(&nearest_location, &location_info, sizeof(location_info));
+                        nearest_store_distance = distance;
+                    }
+                }
+            }
+            // if we get here, we're done searching
+            debug_printf("nearest location is store #%lu, distance %f, addr %s\r\n", 
+                    nearest_location.location_number, nearest_store_distance, nearest_location.street_address);
+            __delay_ms(50);
+            current_system_state = NAVIGATING;
+            
+        } else if (current_system_state == NAVIGATING) {
+            // I couldn't get interrupts to work, but the poll rate of 
+            // this loop is plenty fast for this to work well
+            if (!PORTAbits.RA11 && abs(TMR1 - last_timer_value) > 5000) {
+                // note the debouncing
+                lcd_clear();
+                current_navigation_display_mode++;
+                if (current_navigation_display_mode == NAVIGATION_DISPLAY_MODE_END) {
+                    current_navigation_display_mode = 0;
+                }   
+                last_timer_value = TMR1;
             }
             
-            // fill the buffer
-            read_flash(&flash_buffer, sizeof(flash_buffer));
-            flash_pointer += sizeof(flash_buffer);
-            for (int i = 0; i < LOCATION_COUNT_IN_BUFFER; i++) {
-                // get the latitude and longitude
-                double this_location_latitude = 
-                  (double)flash_buffer[i*LOCATION_DATABASE_ENTRY_LENGTH+4];
-                double this_location_longitude =
-                  (double)flash_buffer[i*LOCATION_DATABASE_ENTRY_LENGTH+4+8];
-                i
-                locations_searched++;
+            if (current_navigation_display_mode == STREET_ADDRESS_PAGE_1) {
+                lcd_home();
+                lcd_print(nearest_location.street_address);
+                lcd_set_cursor(0, 1);
+                lcd_print(&nearest_location.street_address[16]);
+            } else if (current_navigation_display_mode == STREET_ADDRESS_PAGE_2) {
+                if (strlen(nearest_location.street_address) <= 32) {
+                    current_navigation_display_mode = DISTANCE_TO_LOCATION;
+                    continue;
+                }
+                
+                lcd_home();
+                lcd_print(&nearest_location.street_address[32]);
+                lcd_set_cursor(0, 1);
+                lcd_print(&nearest_location.street_address[48]);
+            } else if (current_navigation_display_mode == DISTANCE_TO_LOCATION) {
+                float distance = earth_distance_between(current_latitude, current_longitude,
+                        nearest_location.latitude, nearest_location.longitude);
+                lcd_home();
+                char str[16];
+                memset(str, 0, sizeof(str));
+                sprintf(str, "%lu m away", (uint32_t)distance);
+                lcd_print(str);
+                float heading = heading_to_location(current_latitude, current_longitude,
+                        nearest_location.latitude, nearest_location.longitude);
+                memset(str, 0, sizeof(str));
+                lcd_set_cursor(0, 1);
+                sprintf(str, "heading %u", (uint16_t)heading);
+                lcd_print(str);
+                lcd_print_char(223); // degree symbol
             }
         }
-
-        */
+        
+    }
+    
 
 }

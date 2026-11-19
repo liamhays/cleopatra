@@ -46,6 +46,12 @@ void init_lcd();
 // print characters to the screen
 void lcd_print(const char* string);
 
+// print one char
+void lcd_print_char(uint8_t c);
+
+// clear the screen
+void lcd_clear();
+
 // set the LCD cursor position
 void lcd_set_cursor(uint8_t x, uint8_t y);
 

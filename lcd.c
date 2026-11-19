@@ -147,7 +147,15 @@ void lcd_print(const char* string) {
     }
 }
 
+void lcd_print_char(uint8_t c) {
+    send_byte(c, true);
+}
 void lcd_home() {
     send_byte(LCD_RETURNHOME, false);
+    __delay_ms(2);
+}
+
+void lcd_clear() {
+    send_byte(LCD_CLEARDISPLAY, false);
     __delay_ms(2);
 }
