@@ -1,3 +1,6 @@
+#### Run this file at your own risk! I am not liable for any problems
+#### or damages caused by using this code.
+
 import requests
 import xlrd
 import time
